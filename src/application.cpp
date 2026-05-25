@@ -10,8 +10,8 @@
 
 static const char *TAG = "debounce";
 
-#define BUTTON_GPIO     GPIO_NUM_0   /* adjust to your wiring */
-#define LED_GPIO        GPIO_NUM_2   /* adjust to your wiring */
+#define BUTTON_GPIO     GPIO_NUM_8
+#define LED_GPIO        GPIO_NUM_9
 
 /* Minimum time (µs) between two accepted edges — software guard on top of RC */
 #define DEBOUNCE_US     (5 * 1000)   /* 5 ms */
