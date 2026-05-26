@@ -19,18 +19,20 @@ static const char *TAG = "rc_button";
 
 #define SAMPLE_PERIOD_MS 5
 
+// Ensure the sample period is at least 1 tick to avoid zero-delay issues
 static TickType_t sample_period_ticks(void)
 {
     TickType_t ticks = pdMS_TO_TICKS(SAMPLE_PERIOD_MS);
     return (ticks == 0) ? 1 : ticks;
 }
 
+
 static void button_task(void *arg)
 {
     (void)arg;
 
-    TickType_t last_wake = xTaskGetTickCount();
-    TickType_t sample_ticks = sample_period_ticks();
+    TickType_t last_wake = xTaskGetTickCount(); // returns the current FreeRTOS tick count
+    TickType_t sample_ticks = sample_period_ticks(); // Convert sample period from milliseconds to ticks
 
     int led_on = (gpio_get_level(LED_GPIO) == LED_ACTIVE_LEVEL) ? 1 : 0;
     int last_level = gpio_get_level(BUTTON_GPIO);
