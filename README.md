@@ -96,6 +96,9 @@ platformio.ini      - Board and build settings
 sdkconfig.esp32-s3-devkitc-1  - ESP-IDF sdkconfig
 ```
 
+## Summary
+Testing showed that adding a 100 nF capacitor to the 3-pin button module output caused missed presses and delayed response. Without the capacitor, the button worked reliably. This indicates that the module output is already conditioned or not suitable for additional RC filtering. Therefore, for this module, software handling or direct digital reading is preferable, while RC debounce is better applied to a raw switch contact.
+
 ## Contact
 
 Feedback: max.savin3@gmail.com
