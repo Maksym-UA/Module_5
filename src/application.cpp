@@ -17,19 +17,12 @@ static const char *TAG = "debounce";
 #define BUTTON_TASK_STACK_WORDS 4096
 #define BUTTON_TASK_PRIORITY (tskIDLE_PRIORITY + 1)
 
-#define SAMPLE_PERIOD_MS 1
-#define CLICK_LOCKOUT_MS 30
-#define RELEASE_STABLE_SAMPLES 3
+#define SAMPLE_PERIOD_MS   1
+#define DEBOUNCE_SAMPLES  20   /* consecutive samples required to confirm press or release (20 ms) */
 
 static TickType_t sample_period_ticks(void)
 {
     TickType_t ticks = pdMS_TO_TICKS(SAMPLE_PERIOD_MS);
-    return (ticks == 0) ? 1 : ticks;
-}
-
-static TickType_t click_lockout_ticks(void)
-{
-    TickType_t ticks = pdMS_TO_TICKS(CLICK_LOCKOUT_MS);
     return (ticks == 0) ? 1 : ticks;
 }
 
@@ -48,53 +41,91 @@ static void log_button_led_state(int button_level, int led_on)
              led_level);
 }
 
-/* Task with fast press detect + lockout debounce (press-only actions) */
+/*
+ * Button debounce using a 4-state FSM.
+ *
+ * Both press and release must be stable for DEBOUNCE_SAMPLES consecutive
+ * samples before a state transition is accepted.  This eliminates the
+ * lockout/latch interaction that could cause a press edge to be consumed
+ * during a lockout window and then never re-detected.
+ *
+ * States:
+ *   BTN_RELEASED   – idle, waiting for the first active sample
+ *   BTN_PRESSING   – counting consecutive active samples; any inactive
+ *                    sample resets the counter back to RELEASED
+ *   BTN_PRESSED    – confirmed press (LED already toggled); waiting for
+ *                    the first inactive sample
+ *   BTN_RELEASING  – counting consecutive inactive samples; any active
+ *                    sample resets the counter back to PRESSED
+ */
+typedef enum {
+    BTN_RELEASED,
+    BTN_PRESSING,
+    BTN_PRESSED,
+    BTN_RELEASING
+} btn_state_t;
+
 static void button_task(void *arg)
 {
     (void)arg;
 
     TickType_t sample_ticks = sample_period_ticks();
-    TickType_t lockout_ticks = click_lockout_ticks();
-    TickType_t last_wake = xTaskGetTickCount();
-    uint32_t press_count = 0;
-    int led_on = (gpio_get_level(LED_GPIO) == LED_ACTIVE_LEVEL) ? 1 : 0;
-    int stable_level = gpio_get_level(BUTTON_GPIO);
-    int lockout_left = 0;
-    bool press_latched = false;
-    uint8_t release_stable_count = 0;
+    TickType_t last_wake    = xTaskGetTickCount();
+    uint32_t   press_count  = 0;
+    int        led_on       = (gpio_get_level(LED_GPIO) == LED_ACTIVE_LEVEL) ? 1 : 0;
+
+    btn_state_t state         = BTN_RELEASED;
+    uint8_t     debounce_cnt  = 0;
 
     while (true) {
-        int raw_level = gpio_get_level(BUTTON_GPIO);
+        int raw = gpio_get_level(BUTTON_GPIO);
 
-        if (lockout_left > 0) {
-            lockout_left--;
-        }
+        switch (state) {
 
-        /* Re-arm only after release is stable for multiple samples */
-        if (raw_level != BUTTON_ACTIVE_LEVEL) {
-            if (release_stable_count < RELEASE_STABLE_SAMPLES) {
-                release_stable_count++;
+        case BTN_RELEASED:
+            if (raw == BUTTON_ACTIVE_LEVEL) {
+                debounce_cnt = 1;
+                state = BTN_PRESSING;
             }
-            if (release_stable_count >= RELEASE_STABLE_SAMPLES) {
-                press_latched = false;
+            break;
+
+        case BTN_PRESSING:
+            if (raw == BUTTON_ACTIVE_LEVEL) {
+                if (++debounce_cnt >= DEBOUNCE_SAMPLES) {
+                    /* Confirmed stable press – toggle LED once */
+                    state = BTN_PRESSED;
+                    press_count++;
+                    led_on = !led_on;
+                    gpio_set_level(LED_GPIO, led_on ? LED_ACTIVE_LEVEL : !LED_ACTIVE_LEVEL);
+                    ESP_LOGI(TAG, "Click #%lu", (unsigned long)press_count);
+                    log_button_led_state(raw, led_on);
+                }
+            } else {
+                /* Bounce – restart */
+                debounce_cnt = 0;
+                state = BTN_RELEASED;
             }
-        } else {
-            release_stable_count = 0;
-        }
+            break;
 
-        if (raw_level != stable_level) {
-            stable_level = raw_level;
-
-            if (stable_level == BUTTON_ACTIVE_LEVEL && lockout_left == 0 && !press_latched) {
-                lockout_left = (int)lockout_ticks;
-                press_latched = true;
-
-                press_count++;
-                led_on = !led_on;
-                gpio_set_level(LED_GPIO, led_on ? LED_ACTIVE_LEVEL : !LED_ACTIVE_LEVEL);
-                ESP_LOGI(TAG, "Click #%lu", (unsigned long)press_count);
-                log_button_led_state(stable_level, led_on);
+        case BTN_PRESSED:
+            if (raw != BUTTON_ACTIVE_LEVEL) {
+                debounce_cnt = 1;
+                state = BTN_RELEASING;
             }
+            break;
+
+        case BTN_RELEASING:
+            if (raw != BUTTON_ACTIVE_LEVEL) {
+                if (++debounce_cnt >= DEBOUNCE_SAMPLES) {
+                    /* Confirmed stable release – re-arm for next press */
+                    state = BTN_RELEASED;
+                }
+            } else {
+                /* Still pressed – bounce back */
+                debounce_cnt = 0;
+                state = BTN_PRESSED;
+            }
+            break;
         }
 
         vTaskDelayUntil(&last_wake, sample_ticks);
@@ -134,12 +165,11 @@ void application_init(void)
     }
 
     ESP_LOGI(TAG,
-             "Button debounce ready (GPIO=%d, active_level=%d, sample=%dms, lockout=%dms, release_stable=%d)",
+             "Button debounce ready (GPIO=%d, active_level=%d, sample=%dms, debounce=%d samples)",
              (int)BUTTON_GPIO,
              BUTTON_ACTIVE_LEVEL,
              SAMPLE_PERIOD_MS,
-             CLICK_LOCKOUT_MS,
-             RELEASE_STABLE_SAMPLES);
+             DEBOUNCE_SAMPLES);
     ESP_LOGI(TAG, "Startup raw levels: button=%d, led_gpio=%d",
              gpio_get_level(BUTTON_GPIO), gpio_get_level(LED_GPIO));
     log_button_led_state(gpio_get_level(BUTTON_GPIO), gpio_get_level(LED_GPIO) == LED_ACTIVE_LEVEL);
