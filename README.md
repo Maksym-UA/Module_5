@@ -1,4 +1,4 @@
-# Button Debounce with RC Filter — ESP32-S3, ESP-IDF
+# PID regulator — ESP32-S3, ESP-IDF
 
 ## Project description
 
