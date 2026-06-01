@@ -1,16 +1,9 @@
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
-
+#include "driver/gpio.h"
 #include "esp_err.h"
 
-#ifdef __cplusplus
-extern "C" {
-    #endif
-
-
-
-    #ifdef __cplusplus
+namespace Led
+{
+esp_err_t init_all();
 }
-#endif
