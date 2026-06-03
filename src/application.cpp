@@ -6,7 +6,6 @@
 #include "control/sensor_probe.h"
 #include "control/sensor_reader.h"
 #include "control/signal_filter.h"
-#include "control/threshold_controller.h"
 #include "led.h"
 #include "photoresistor.h"
 
@@ -51,7 +50,7 @@ void Application::run()
 
     ESP_LOGI(
         AppConfig::kLogTag,
-        "PID control started (target light: %.1f%%)",
+        "Closed-loop light control started (target light: %.1f%%)",
         static_cast<double>(AppConfig::kTargetLightPercent));
 
     SensorProbe probe;
@@ -80,31 +79,8 @@ void Application::run()
         AppConfig::kOutputMax,
         AppConfig::kPidDeadband);
 
-    ThresholdControllerConfig threshold_config;
-    threshold_config.raw_low_ratio = AppConfig::kThresholdRawLowRatio;
-    threshold_config.raw_high_ratio = AppConfig::kThresholdRawHighRatio;
-    threshold_config.step_up = AppConfig::kThresholdStepUp;
-    threshold_config.step_down = AppConfig::kThresholdStepDown;
-    threshold_config.debounce_cycles = AppConfig::kThresholdDebounceCycles;
-    threshold_config.adjust_cooldown_cycles = AppConfig::kThresholdAdjustCooldownCycles;
-
-    ThresholdController threshold_controller(threshold_config);
-    LightController light_controller(pid, threshold_controller, AppConfig::kTargetLightPercent);
-    light_controller.initialize(probe);
-
-    if (light_controller.using_threshold_mode()) {
-        ESP_LOGI(AppConfig::kLogTag, "Threshold control enabled");
-    }
-
+    LightController light_controller(pid, AppConfig::kTargetLightPercent);
     SensorReader sensor_reader(AppConfig::kRawSamplesPerCycle);
-
-    if (light_controller.using_threshold_mode() && probe.has_raw_span) {
-        const uint16_t raw_min = (probe.off_raw < probe.on_raw) ? probe.off_raw : probe.on_raw;
-        sensor_reader.set_invalid_low_floor(static_cast<uint16_t>(raw_min / 4));
-    } else {
-        sensor_reader.set_invalid_low_hold_cycles(0);
-    }
-
     SignalFilter input_filter(AppConfig::kInputFilterAlpha);
 
     int64_t next_log_us = esp_timer_get_time() + AppConfig::kLogPeriodUs;
@@ -122,32 +98,27 @@ void Application::run()
         }
 
         const uint16_t light_raw = sample.effective_raw;
-        const uint8_t light_percent =
-            static_cast<uint8_t>(SensorProbeLogic::raw_to_percent(light_raw));
+        const float raw_percent = SensorProbeLogic::raw_to_percent(light_raw);
 
-        float control_percent = 0.0F;
+        float measured_light_percent = 0.0F;
         if (probe.has_raw_span) {
-            control_percent = SensorProbeLogic::sensor_percent_from_probe_raw(light_raw, probe);
+            measured_light_percent = SensorProbeLogic::sensor_percent_from_probe_raw(light_raw, probe);
         } else {
-            control_percent =
-                SensorProbeLogic::sensor_percent_for_control(light_percent, probe.invert_sensor_percent);
+            measured_light_percent = SensorProbeLogic::sensor_percent_for_control(
+                static_cast<uint8_t>(raw_percent),
+                probe.invert_sensor_percent);
         }
 
-        const float filtered_control_percent = input_filter.update(control_percent);
+        const float filtered_light_percent = input_filter.update(measured_light_percent);
 
         const int64_t now_us = esp_timer_get_time();
         const float dt_seconds = static_cast<float>(now_us - prev_time_us) / 1000000.0F;
         prev_time_us = now_us;
 
-        const float brightness_target = light_controller.compute_brightness_target(
-            light_raw,
-            light_percent,
-            filtered_control_percent,
-            commanded_brightness,
-            dt_seconds);
+        const float brightness_target =
+            light_controller.compute_brightness_target(filtered_light_percent, dt_seconds);
 
         const float delta = brightness_target - commanded_brightness;
-
         if (delta > AppConfig::kMaxBrightnessStepPerCycle) {
             commanded_brightness += AppConfig::kMaxBrightnessStepPerCycle;
         } else if (delta < -AppConfig::kMaxBrightnessStepPerCycle) {
@@ -171,11 +142,11 @@ void Application::run()
         if (now_us >= next_log_us) {
             ESP_LOGI(
                 AppConfig::kLogTag,
-                "raw=%u effective=%u sensor=%u%% control=%.1f%% target=%.1f%% brightness=%u",
+                "raw=%u effective=%u measured=%.1f%% filtered=%.1f%% target=%.1f%% brightness=%u",
                 static_cast<unsigned>(sample.measured_raw),
                 static_cast<unsigned>(sample.effective_raw),
-                static_cast<unsigned>(light_percent),
-                static_cast<double>(filtered_control_percent),
+                static_cast<double>(measured_light_percent),
+                static_cast<double>(filtered_light_percent),
                 static_cast<double>(AppConfig::kTargetLightPercent),
                 static_cast<unsigned>(brightness));
 
