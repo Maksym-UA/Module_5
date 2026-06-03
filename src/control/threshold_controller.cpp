@@ -1,4 +1,4 @@
-#include "threshold_controller.h"
+#include "control/threshold_controller.h"
 
 ThresholdController::ThresholdController(const ThresholdControllerConfig &config)
     : config_(config)
@@ -34,7 +34,7 @@ bool ThresholdController::is_enabled() const
     return enabled_;
 }
 
-float ThresholdController::update(uint16_t light_raw, float current_brightness) const
+float ThresholdController::update(uint16_t light_raw, float current_brightness)
 {
     if (!enabled_) {
         return current_brightness;

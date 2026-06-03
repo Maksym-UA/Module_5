@@ -3,10 +3,10 @@
 #include "app_config.h"
 #include "control/light_controller.h"
 #include "control/pid_controller.h"
-#include "control/sensor_reader.h"
 #include "control/sensor_probe.h"
+#include "control/sensor_reader.h"
 #include "control/signal_filter.h"
-#include "threshold_controller.h"
+#include "control/threshold_controller.h"
 #include "led.h"
 #include "photoresistor.h"
 
@@ -17,13 +17,11 @@
 
 namespace
 {
-static const char *TAG = "PID";
-
 float clamp_float(float value, float min_value, float max_value)
 {
     return SensorProbeLogic::clamp(value, min_value, max_value);
 }
-} // namespace
+}
 
 void application_init()
 {
@@ -33,50 +31,54 @@ void application_init()
 
 void Application::start()
 {
-    ESP_LOGI(TAG, "Starting application...");
+    ESP_LOGI(AppConfig::kLogTag, "Starting application...");
     run();
 }
 
 void Application::run()
 {
-    const esp_err_t led_err = Led::init_all();
-    if (led_err != ESP_OK) {
-        ESP_LOGE(TAG, "LED init failed: %s", esp_err_to_name(led_err));
+    esp_err_t err = Led::init_all();
+    if (err != ESP_OK) {
+        ESP_LOGE(AppConfig::kLogTag, "LED init failed: %s", esp_err_to_name(err));
         return;
     }
 
-    const esp_err_t photo_err = Photoresistor::init_all();
-    if (photo_err != ESP_OK) {
-        ESP_LOGE(TAG, "Photoresistor init failed: %s", esp_err_to_name(photo_err));
+    err = Photoresistor::init_all();
+    if (err != ESP_OK) {
+        ESP_LOGE(AppConfig::kLogTag, "Photoresistor init failed: %s", esp_err_to_name(err));
         return;
     }
 
-    ESP_LOGI(TAG,
-             "PID control started (target light: %.1f%%)",
-             static_cast<double>(AppConfig::kTargetLightPercent));
-
-    PidController pid(AppConfig::kPidKp,
-                      AppConfig::kPidKi,
-                      AppConfig::kPidKd,
-                      AppConfig::kOutputMin,
-                      AppConfig::kOutputMax,
-                      AppConfig::kPidDeadband);
+    ESP_LOGI(
+        AppConfig::kLogTag,
+        "PID control started (target light: %.1f%%)",
+        static_cast<double>(AppConfig::kTargetLightPercent));
 
     SensorProbe probe;
-    const esp_err_t probe_err = SensorProbeLogic::detect_sensor_inversion(&probe);
-    if (probe_err != ESP_OK) {
-        ESP_LOGW(TAG,
-                 "Sensor polarity probe failed, fallback invert=%u (%s)",
-                 static_cast<unsigned>(probe.invert_sensor_percent ? 1U : 0U),
-                 esp_err_to_name(probe_err));
+    err = SensorProbeLogic::detect_sensor_inversion(&probe);
+    if (err != ESP_OK) {
+        ESP_LOGW(
+            AppConfig::kLogTag,
+            "Sensor polarity probe failed, fallback invert=%u (%s)",
+            static_cast<unsigned>(probe.invert_sensor_percent ? 1U : 0U),
+            esp_err_to_name(err));
     } else {
-        ESP_LOGI(TAG,
-                 "Sensor polarity: invert=%u off_raw=%u on_raw=%u span_mode=%u",
-                 static_cast<unsigned>(probe.invert_sensor_percent ? 1U : 0U),
-                 static_cast<unsigned>(probe.off_raw),
-                 static_cast<unsigned>(probe.on_raw),
-                 static_cast<unsigned>(probe.has_raw_span ? 1U : 0U));
+        ESP_LOGI(
+            AppConfig::kLogTag,
+            "Sensor polarity: invert=%u off_raw=%u on_raw=%u span_mode=%u",
+            static_cast<unsigned>(probe.invert_sensor_percent ? 1U : 0U),
+            static_cast<unsigned>(probe.off_raw),
+            static_cast<unsigned>(probe.on_raw),
+            static_cast<unsigned>(probe.has_raw_span ? 1U : 0U));
     }
+
+    PidController pid(
+        AppConfig::kPidKp,
+        AppConfig::kPidKi,
+        AppConfig::kPidKd,
+        AppConfig::kOutputMin,
+        AppConfig::kOutputMax,
+        AppConfig::kPidDeadband);
 
     ThresholdControllerConfig threshold_config;
     threshold_config.raw_low_ratio = AppConfig::kThresholdRawLowRatio;
@@ -91,79 +93,91 @@ void Application::run()
     light_controller.initialize(probe);
 
     if (light_controller.using_threshold_mode()) {
-        ESP_LOGI(TAG, "Threshold control enabled");
+        ESP_LOGI(AppConfig::kLogTag, "Threshold control enabled");
     }
 
-    SensorReader sensor_reader(AppConfig::kRawSamplesPerCycle, AppConfig::kZeroRawDebounceCycles);
+    SensorReader sensor_reader(AppConfig::kRawSamplesPerCycle);
+
+    if (light_controller.using_threshold_mode() && probe.has_raw_span) {
+        const uint16_t raw_min = (probe.off_raw < probe.on_raw) ? probe.off_raw : probe.on_raw;
+        sensor_reader.set_invalid_low_floor(static_cast<uint16_t>(raw_min / 4));
+    } else {
+        sensor_reader.set_invalid_low_hold_cycles(0);
+    }
+
     SignalFilter input_filter(AppConfig::kInputFilterAlpha);
 
+    int64_t next_log_us = esp_timer_get_time() + AppConfig::kLogPeriodUs;
     int64_t prev_time_us = esp_timer_get_time();
-    int64_t next_log_us = prev_time_us + AppConfig::kLogPeriodUs;
 
-    float filtered_input_percent = 0.0F;
     float commanded_brightness = 0.0F;
 
     while (true) {
-        uint16_t light_raw = 0;
-        const esp_err_t raw_err = sensor_reader.read_raw(&light_raw);
-        if (raw_err != ESP_OK) {
-            ESP_LOGE(TAG, "Photoresistor raw read failed: %s", esp_err_to_name(raw_err));
+        SensorSample sample;
+        err = sensor_reader.read(&sample);
+        if (err != ESP_OK) {
+            ESP_LOGE(AppConfig::kLogTag, "Photoresistor raw read failed: %s", esp_err_to_name(err));
             vTaskDelay(AppConfig::kControlPeriod);
             continue;
         }
 
+        const uint16_t light_raw = sample.effective_raw;
         const uint8_t light_percent =
             static_cast<uint8_t>(SensorProbeLogic::raw_to_percent(light_raw));
+
+        float control_percent = 0.0F;
+        if (probe.has_raw_span) {
+            control_percent = SensorProbeLogic::sensor_percent_from_probe_raw(light_raw, probe);
+        } else {
+            control_percent =
+                SensorProbeLogic::sensor_percent_for_control(light_percent, probe.invert_sensor_percent);
+        }
+
+        const float filtered_control_percent = input_filter.update(control_percent);
 
         const int64_t now_us = esp_timer_get_time();
         const float dt_seconds = static_cast<float>(now_us - prev_time_us) / 1000000.0F;
         prev_time_us = now_us;
 
-        float sensor_control_percent = 0.0F;
-        if (probe.has_raw_span) {
-            sensor_control_percent = SensorProbeLogic::sensor_percent_from_probe_raw(light_raw, probe);
-        } else {
-            sensor_control_percent =
-                SensorProbeLogic::sensor_percent_for_control(light_percent, probe.invert_sensor_percent);
-        }
-
-        filtered_input_percent = input_filter.update(sensor_control_percent);
-
-        float brightness_target = light_controller.compute_brightness_target(
+        const float brightness_target = light_controller.compute_brightness_target(
             light_raw,
             light_percent,
-            filtered_input_percent,
+            filtered_control_percent,
             commanded_brightness,
             dt_seconds);
 
-        const float brightness_delta = brightness_target - commanded_brightness;
+        const float delta = brightness_target - commanded_brightness;
 
-        if (brightness_delta > AppConfig::kMaxBrightnessStepPerCycle) {
+        if (delta > AppConfig::kMaxBrightnessStepPerCycle) {
             commanded_brightness += AppConfig::kMaxBrightnessStepPerCycle;
-        } else if (brightness_delta < -AppConfig::kMaxBrightnessStepPerCycle) {
+        } else if (delta < -AppConfig::kMaxBrightnessStepPerCycle) {
             commanded_brightness -= AppConfig::kMaxBrightnessStepPerCycle;
         } else {
             commanded_brightness = brightness_target;
         }
 
-        commanded_brightness = clamp_float(commanded_brightness, AppConfig::kOutputMin, AppConfig::kOutputMax);
+        commanded_brightness =
+            clamp_float(commanded_brightness, AppConfig::kOutputMin, AppConfig::kOutputMax);
+
         const uint8_t brightness = static_cast<uint8_t>(commanded_brightness);
 
-        const esp_err_t pwm_err = Led::set_brightness(brightness);
-        if (pwm_err != ESP_OK) {
-            ESP_LOGE(TAG, "LED brightness update failed: %s", esp_err_to_name(pwm_err));
+        err = Led::set_brightness(brightness);
+        if (err != ESP_OK) {
+            ESP_LOGE(AppConfig::kLogTag, "LED brightness update failed: %s", esp_err_to_name(err));
             vTaskDelay(AppConfig::kControlPeriod);
             continue;
         }
 
         if (now_us >= next_log_us) {
-            ESP_LOGI(TAG,
-                     "raw=%u sensor=%u%% control=%.1f%% target=%.1f%% brightness=%u",
-                     static_cast<unsigned>(light_raw),
-                     static_cast<unsigned>(light_percent),
-                     static_cast<double>(filtered_input_percent),
-                     static_cast<double>(AppConfig::kTargetLightPercent),
-                     static_cast<unsigned>(brightness));
+            ESP_LOGI(
+                AppConfig::kLogTag,
+                "raw=%u effective=%u sensor=%u%% control=%.1f%% target=%.1f%% brightness=%u",
+                static_cast<unsigned>(sample.measured_raw),
+                static_cast<unsigned>(sample.effective_raw),
+                static_cast<unsigned>(light_percent),
+                static_cast<double>(filtered_control_percent),
+                static_cast<double>(AppConfig::kTargetLightPercent),
+                static_cast<unsigned>(brightness));
 
             next_log_us = now_us + AppConfig::kLogPeriodUs;
         }

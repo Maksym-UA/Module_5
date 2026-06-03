@@ -1,5 +1,7 @@
 #include "control/light_controller.h"
 
+#include "app_config.h"
+
 LightController::LightController(PidController pid, ThresholdController threshold_controller, float target_percent)
     : pid_(pid),
       threshold_controller_(threshold_controller),
@@ -10,6 +12,7 @@ LightController::LightController(PidController pid, ThresholdController threshol
 void LightController::initialize(const SensorProbe &probe)
 {
     use_threshold_controller_ =
+    AppConfig::kEnableThresholdController &&
         probe.has_raw_span &&
         threshold_controller_.initialize(probe.off_raw, probe.on_raw);
 }

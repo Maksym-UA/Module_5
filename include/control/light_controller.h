@@ -2,7 +2,7 @@
 
 #include "control/pid_controller.h"
 #include "control/sensor_probe.h"
-#include "threshold_controller.h"
+#include "control/threshold_controller.h"
 #include <stdint.h>
 
 class LightController

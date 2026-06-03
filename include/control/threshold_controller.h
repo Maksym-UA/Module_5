@@ -19,7 +19,7 @@ public:
 
     bool initialize(uint16_t off_raw, uint16_t on_raw);
     bool is_enabled() const;
-    float update(uint16_t light_raw, float current_brightness) const;
+    float update(uint16_t light_raw, float current_brightness);
 
 private:
     ThresholdControllerConfig config_{};
@@ -29,7 +29,7 @@ private:
     uint16_t threshold_raw_low_ = 0;
     uint16_t threshold_raw_high_ = 0;
 
-    mutable uint8_t low_hits_ = 0;
-    mutable uint8_t high_hits_ = 0;
-    mutable uint8_t cooldown_ = 0;
+    uint8_t low_hits_ = 0;
+    uint8_t high_hits_ = 0;
+    uint8_t cooldown_ = 0;
 };
