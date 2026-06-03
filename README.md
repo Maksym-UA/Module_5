@@ -1,105 +1,133 @@
-# PID regulator — ESP32-S3, ESP-IDF
+# Light Controller — ESP32-S3, ESP-IDF
 
-## Project description
+## Project Description
 
-Demonstrates button debouncing on ESP32-S3 using an external 3-pin button module (VCC, OUT, GND) plus an RC filter (10 kOhm and 100 nF). The firmware uses a fast polling task with software lockout debounce. Only valid **press** events are counted; each press toggles the LED state.
+This firmware controls 5 LEDs using PWM based on a photoresistor reading.
 
+- Platform: ESP32-S3-DevKitC-1
+- Framework: ESP-IDF (via PlatformIO)
+- Sensor input: ADC oneshot (photoresistor)
+- LED output: LEDC PWM on 5 channels
 
+The control logic is optimized for a near-threshold sensor response, where readings can jump between dark and bright states instead of changing smoothly.
 
 ## Hardware
 
 | Component | Value / Details |
 |---|---|
 | MCU | ESP32-S3-DevKitC-1 |
-| Button | External 3-pin module (VCC, OUT, GND) |
-| Resistor | 10 kOhm |
-| Capacitor | 100 nF |
-| LED | Red + 220 Ω series resistor |
+| Sensor | Photoresistor module on GPIO4 |
+| LEDs | 5 LEDs on GPIO 5, 6, 7, 8, 9 |
+| PWM driver | LEDC low-speed mode |
 
 ## Wiring
 
-```
-Button module VCC -> ESP32 3V3
-Button module GND -> ESP32 GND
-Button module OUT -> 10 kOhm -> GPIO_NUM_8
-GPIO_NUM_8 -> 100 nF -> GND
-
-GPIO_NUM_9 ── LED ── 220Ω ── GND
-```
-
-3-pin button module mapping:
+Photoresistor:
 
 - VCC -> 3.3V
-- OUT -> GPIO input pin
-- GND -> Ground
+- GND -> GND
+- OUT -> GPIO4
 
-Current firmware uses active-high logic: released = 0, pressed = 1.
-If your module is active-low, set `BUTTON_ACTIVE_LEVEL` to `0` in `src/application.cpp`.
+LEDs:
 
-> Adjust `BUTTON_GPIO` and `LED_GPIO` in `src/application.cpp` to match your board.
+- GPIO5 -> LED 1
+- GPIO6 -> LED 2
+- GPIO7 -> LED 3
+- GPIO8 -> LED 4
+- GPIO9 -> LED 5
 
-## Software requirements
+Use proper current-limiting resistors for each LED.
+
+## Software Requirements
 
 - VS Code
 - PlatformIO extension
 - ESP-IDF toolchain (installed automatically by PlatformIO)
 
-## Build and run
+## Build And Run
 
-Build firmware:
+Build:
 
 ```bash
 pio run
 ```
 
-Upload firmware:
+Upload:
 
 ```bash
 pio run -t upload
 ```
 
-Open serial monitor (115200 baud):
+Serial monitor:
 
 ```bash
 pio device monitor -b 115200
 ```
 
-## Configuration
+## Current Control Strategy
 
-- Framework: `espidf`
-- Monitor speed: `115200`
-- Flash mode/size: `qio`, `16 MB`
+The firmware contains two control paths:
 
-## Debounce behavior (current)
+1. PID path (fallback):
+- Uses filtered sensor percentage and standard PID terms.
 
-- Sampling period: `SAMPLE_PERIOD_MS = 1`
-- Click lockout: `CLICK_LOCKOUT_MS = 30`
-- Release re-arm stability: `RELEASE_STABLE_SAMPLES = 3`
+2. Threshold-hysteresis path (active when probe span is valid):
+- Runs an automatic startup probe with LEDs off/on.
+- Captures `off_raw` and `on_raw`.
+- Builds low/high thresholds from that span.
+- Increases brightness when raw is persistently below low threshold.
+- Decreases brightness when raw is persistently above high threshold.
+- Holds brightness inside the hysteresis band.
+- Adds debounce and cooldown to reduce visible flicker.
+- Applies bounded zero-reading debounce to reject short ADC zero glitches.
 
-How it works:
+This approach is more stable than pure PID when the sensor behaves like a switch near an optical threshold.
 
-1. Detect edge quickly via polling.
-2. Count click only when button enters active level and press is not latched.
-3. Start lockout timer to ignore bounce spikes.
-4. Re-arm next click only after release level is stable for several samples.
+## Important Notes
 
-This gives responsive clicks while preventing duplicate counts.
+- The logged target percentage is a sensor target, not direct LED duty.
+- Brightness values are PWM duty on a 0..127 scale.
+- A value such as brightness 90 does not mean 90%; it means 90/127 duty.
 
-## Project structure
+## Project Structure
 
-```
+```text
+include/
+  application.h
+
 src/
-  main.cpp          - Entry point: app_main() calls application_init()
-  application.cpp   - FreeRTOS polling task, GPIO config, debounce and LED toggle logic
-  application.h     - Public interface: declares application_init()
-platformio.ini      - Board and build settings
-sdkconfig.esp32-s3-devkitc-1  - ESP-IDF sdkconfig
+  main.cpp
+  application.cpp
+
+lib/
+  led/
+    led.h
+    led.cpp
+  photoresistor/
+    photoresistor.h
+    photoresistor.cpp
+
+platformio.ini
+sdkconfig.esp32-s3-devkitc-1
+CMakeLists.txt
 ```
 
-## Summary
-Testing showed that adding a 100 nF capacitor to the 3-pin button module output caused missed presses and delayed response. Without the capacitor, the button worked reliably. This indicates that the module output is already conditioned or not suitable for additional RC filtering. Therefore, for this module, software handling or direct digital reading is preferable, while RC debounce is better applied to a raw switch contact.
+## Logging
+
+Typical runtime log format:
+
+```text
+I (...) PID: raw=271 sensor=6% control=52.9% target=80.0% brightness=97
+```
+
+Fields:
+
+- raw: ADC raw value
+- sensor: direct percent from ADC raw (0..100)
+- control: filtered/normalized control value used by controller
+- target: desired control setpoint
+- brightness: PWM duty command (0..127)
 
 ## Contact
 
 Feedback: max.savin3@gmail.com
-
