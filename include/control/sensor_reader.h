@@ -1,7 +1,6 @@
 #pragma once
 
 #include "esp_err.h"
-#include <stddef.h>
 #include <stdint.h>
 
 struct SensorSample
@@ -13,12 +12,7 @@ struct SensorSample
 class SensorReader
 {
 public:
-    explicit SensorReader(size_t sample_count);
+    SensorReader() = default;
 
     esp_err_t read(SensorSample *sample);
-
-private:
-    esp_err_t read_filtered_raw(uint16_t *raw_value);
-
-    size_t sample_count_ = 0;
 };

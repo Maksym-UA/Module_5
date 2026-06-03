@@ -17,5 +17,10 @@ float clamp(float value, float min_value, float max_value);
 float raw_to_percent(uint16_t raw);
 float sensor_percent_for_control(uint8_t sensor_percent, bool invert_sensor_percent);
 float sensor_percent_from_probe_raw(uint16_t raw, const SensorProbe &probe);
+float sensor_percent_from_control_range(
+    uint16_t raw,
+    uint16_t raw_min,
+    uint16_t raw_max,
+    bool invert);
 esp_err_t detect_sensor_inversion(SensorProbe *probe);
 }

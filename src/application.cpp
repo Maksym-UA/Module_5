@@ -80,7 +80,7 @@ void Application::run()
         AppConfig::kPidDeadband);
 
     LightController light_controller(pid, AppConfig::kTargetLightPercent);
-    SensorReader sensor_reader(AppConfig::kRawSamplesPerCycle);
+    SensorReader sensor_reader;
     SignalFilter input_filter(AppConfig::kInputFilterAlpha);
 
     int64_t next_log_us = esp_timer_get_time() + AppConfig::kLogPeriodUs;
@@ -98,15 +98,16 @@ void Application::run()
         }
 
         const uint16_t light_raw = sample.effective_raw;
-        const float raw_percent = SensorProbeLogic::raw_to_percent(light_raw);
 
         float measured_light_percent = 0.0F;
         if (probe.has_raw_span) {
             measured_light_percent = SensorProbeLogic::sensor_percent_from_probe_raw(light_raw, probe);
         } else {
-            measured_light_percent = SensorProbeLogic::sensor_percent_for_control(
-                static_cast<uint8_t>(raw_percent),
-                probe.invert_sensor_percent);
+            measured_light_percent = SensorProbeLogic::sensor_percent_from_control_range(
+                light_raw,
+                AppConfig::kControlRawMin,
+                AppConfig::kControlRawMax,
+                false);
         }
 
         const float filtered_light_percent = input_filter.update(measured_light_percent);

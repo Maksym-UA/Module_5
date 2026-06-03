@@ -1,15 +1,15 @@
-# Light Controller — ESP32-S3, ESP-IDF
+# Light Controller - ESP32-S3, ESP-IDF
 
-## Project Description
+## Overview
 
-This firmware controls 5 LEDs using PWM based on a photoresistor reading.
+Firmware for ESP32-S3-DevKitC-1 that controls 5 LEDs with a closed-loop PID regulator using a photoresistor as feedback.
 
 - Platform: ESP32-S3-DevKitC-1
-- Framework: ESP-IDF (via PlatformIO)
-- Sensor input: ADC oneshot (photoresistor)
-- LED output: LEDC PWM on 5 channels
+- Framework: ESP-IDF via PlatformIO
+- Sensor input: ADC oneshot (photoresistor on GPIO4)
+- LED output: LEDC PWM on GPIO5..GPIO9
 
-The control logic is optimized for a near-threshold sensor response, where readings can jump between dark and bright states instead of changing smoothly.
+The controller targets a configured light level (`kTargetLightPercent`) and continuously adjusts LED brightness (0..127 duty units).
 
 ## Hardware
 
@@ -17,8 +17,8 @@ The control logic is optimized for a near-threshold sensor response, where readi
 |---|---|
 | MCU | ESP32-S3-DevKitC-1 |
 | Sensor | Photoresistor module on GPIO4 |
-| LEDs | 5 LEDs on GPIO 5, 6, 7, 8, 9 |
-| PWM driver | LEDC low-speed mode |
+| LEDs | 5 LEDs on GPIO5, GPIO6, GPIO7, GPIO8, GPIO9 |
+| PWM driver | LEDC low-speed mode, 8-bit resolution, 5 kHz |
 
 ## Wiring
 
@@ -30,13 +30,13 @@ Photoresistor:
 
 LEDs:
 
-- GPIO5 -> LED 1
-- GPIO6 -> LED 2
-- GPIO7 -> LED 3
-- GPIO8 -> LED 4
-- GPIO9 -> LED 5
+- GPIO5 -> LED1
+- GPIO6 -> LED2
+- GPIO7 -> LED3
+- GPIO8 -> LED4
+- GPIO9 -> LED5
 
-Use proper current-limiting resistors for each LED.
+Use a current-limiting resistor for each LED.
 
 ## Software Requirements
 
@@ -44,7 +44,7 @@ Use proper current-limiting resistors for each LED.
 - PlatformIO extension
 - ESP-IDF toolchain (installed automatically by PlatformIO)
 
-## Build And Run
+## Build, Upload, Monitor
 
 Build:
 
@@ -64,69 +64,95 @@ Serial monitor:
 pio device monitor -b 115200
 ```
 
-## Current Control Strategy
+## Runtime Flow
 
-The firmware contains two control paths:
+1. `main.cpp` calls `application_init()`.
+2. `Application::start()` initializes LED and ADC drivers.
+3. A startup polarity probe measures sensor raw value with LEDs off and on.
+4. Control loop runs every 50 ms:
+- read ADC raw
+- clamp accepted raw value (`kAcceptedRawMax`)
+- convert raw to measured percent (probe span or fallback raw range)
+- low-pass filter measurement
+- compute PID output as brightness target
+- apply per-cycle brightness slew limit
+- write PWM duty to all LEDs
 
-1. PID path (fallback):
-- Uses filtered sensor percentage and standard PID terms.
+## Control Configuration
 
-2. Threshold-hysteresis path (active when probe span is valid):
-- Runs an automatic startup probe with LEDs off/on.
-- Captures `off_raw` and `on_raw`.
-- Builds low/high thresholds from that span.
-- Increases brightness when raw is persistently below low threshold.
-- Decreases brightness when raw is persistently above high threshold.
-- Holds brightness inside the hysteresis band.
-- Adds debounce and cooldown to reduce visible flicker.
-- Applies bounded zero-reading debounce to reject short ADC zero glitches.
+Current values from `include/app_config.h`:
 
-This approach is more stable than pure PID when the sensor behaves like a switch near an optical threshold.
+- PID gains: Kp=0.8, Ki=0.05, Kd=0.02
+- Deadband: 3.0
+- Target light: 60.0%
+- Output range: 0..127
+- Input filter alpha: 0.04
+- Max brightness step per cycle: 1.0
+- Loop period: 50 ms
+- Log period: 500 ms
 
-## Important Notes
+Probe and conversion settings:
 
-- The logged target percentage is a sensor target, not direct LED duty.
-- Brightness values are PWM duty on a 0..127 scale.
-- A value such as brightness 90 does not mean 90%; it means 90/127 duty.
-
-## Project Structure
-
-```text
-include/
-  application.h
-
-src/
-  main.cpp
-  application.cpp
-
-lib/
-  led/
-    led.h
-    led.cpp
-  photoresistor/
-    photoresistor.h
-    photoresistor.cpp
-
-platformio.ini
-sdkconfig.esp32-s3-devkitc-1
-CMakeLists.txt
-```
+- Default invert fallback: true
+- Probe brightness: 127
+- Probe settle delay: 180 ms
+- Probe min delta raw: 100
+- Fallback control raw range: 18..55
+- Accepted raw clamp max: 120
 
 ## Logging
 
 Typical runtime log format:
 
 ```text
-I (...) PID: raw=271 sensor=6% control=52.9% target=80.0% brightness=97
+I (...) PID: raw=1120 effective=120 measured=57.2% filtered=54.8% target=60.0% brightness=74
 ```
 
 Fields:
 
-- raw: ADC raw value
-- sensor: direct percent from ADC raw (0..100)
-- control: filtered/normalized control value used by controller
-- target: desired control setpoint
-- brightness: PWM duty command (0..127)
+- `raw`: direct ADC sample
+- `effective`: clamped value used by control path
+- `measured`: mapped sensor percent before filtering
+- `filtered`: low-pass filtered percent for PID input
+- `target`: configured setpoint percent
+- `brightness`: PWM duty command (0..127)
+
+## Project Structure
+
+```text
+include/
+  app_config.h
+  application.h
+  control/
+    light_controller.h
+    pid_controller.h
+    sensor_probe.h
+    sensor_reader.h
+    signal_filter.h
+
+lib/
+  led/
+    led.cpp
+    led.h
+  photoresistor/
+    photoresistor.cpp
+    photoresistor.h
+
+src/
+  application.cpp
+  CMakeLists.txt
+  main.cpp
+  control/
+    light_controller.cpp
+    pid_controller.cpp
+    sensor_probe.cpp
+    sensor_reader.cpp
+    signal_filter.cpp
+
+CMakeLists.txt
+platformio.ini
+sdkconfig.esp32-s3-devkitc-1
+```
 
 ## Contact
 

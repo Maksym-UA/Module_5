@@ -55,6 +55,30 @@ float SensorProbeLogic::sensor_percent_from_probe_raw(uint16_t raw, const Sensor
     return clamp((relative * 100.0F) / span, 0.0F, 100.0F);
 }
 
+float SensorProbeLogic::sensor_percent_from_control_range(
+    uint16_t raw,
+    uint16_t raw_min,
+    uint16_t raw_max,
+    bool invert)
+{
+    if (raw_max <= raw_min) {
+        return 0.0F;
+    }
+
+    float normalized =
+        (static_cast<float>(raw) - static_cast<float>(raw_min)) /
+        (static_cast<float>(raw_max) - static_cast<float>(raw_min));
+
+    normalized = clamp(normalized, 0.0F, 1.0F);
+
+    float percent = normalized * 100.0F;
+    if (invert) {
+        percent = 100.0F - percent;
+    }
+
+    return percent;
+}
+
 esp_err_t SensorProbeLogic::detect_sensor_inversion(SensorProbe *probe)
 {
     if (probe == nullptr) {
@@ -62,6 +86,9 @@ esp_err_t SensorProbeLogic::detect_sensor_inversion(SensorProbe *probe)
     }
 
     probe->invert_sensor_percent = AppConfig::kDefaultInvertSensorPercent;
+    probe->off_raw = 0;
+    probe->on_raw = 0;
+    probe->has_raw_span = false;
 
     esp_err_t err = Led::set_brightness(0);
     if (err != ESP_OK) {
@@ -72,12 +99,6 @@ esp_err_t SensorProbeLogic::detect_sensor_inversion(SensorProbe *probe)
 
     uint16_t off_raw = 0;
     err = Photoresistor::read_raw(&off_raw);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    uint8_t off_percent = 0;
-    err = Photoresistor::read_percent(&off_percent);
     if (err != ESP_OK) {
         return err;
     }
@@ -95,12 +116,6 @@ esp_err_t SensorProbeLogic::detect_sensor_inversion(SensorProbe *probe)
         return err;
     }
 
-    uint8_t on_percent = 0;
-    err = Photoresistor::read_percent(&on_percent);
-    if (err != ESP_OK) {
-        return err;
-    }
-
     err = Led::set_brightness(0);
     if (err != ESP_OK) {
         return err;
@@ -109,18 +124,15 @@ esp_err_t SensorProbeLogic::detect_sensor_inversion(SensorProbe *probe)
     probe->off_raw = off_raw;
     probe->on_raw = on_raw;
 
-    const int delta_percent = static_cast<int>(on_percent) - static_cast<int>(off_percent);
-    const int abs_delta_percent = (delta_percent < 0) ? -delta_percent : delta_percent;
-
-    if (abs_delta_percent < AppConfig::kPolarityMinDeltaPercent) {
-        return ESP_OK;
-    }
-
     const int delta_raw = static_cast<int>(on_raw) - static_cast<int>(off_raw);
     const int abs_delta_raw = (delta_raw < 0) ? -delta_raw : delta_raw;
 
-    probe->has_raw_span = (abs_delta_raw >= static_cast<int>(AppConfig::kPolarityMinDeltaRaw));
-    probe->invert_sensor_percent = (delta_percent < 0);
+    if (abs_delta_raw < static_cast<int>(AppConfig::kPolarityMinDeltaRaw)) {
+        return ESP_OK;
+    }
+
+    probe->has_raw_span = true;
+    probe->invert_sensor_percent = (delta_raw < 0);
 
     return ESP_OK;
 }
