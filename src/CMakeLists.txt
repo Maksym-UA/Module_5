@@ -1,6 +1,13 @@
-FILE(GLOB_RECURSE app_sources ${CMAKE_SOURCE_DIR}/src/*.c ${CMAKE_SOURCE_DIR}/src/*.cpp)
-
 idf_component_register(
-	SRCS ${app_sources}
-	INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/include
+    SRCS
+        "main.cpp"
+        "application.cpp"
+        "control/pid_controller.cpp"
+        "control/sensor_probe.cpp"
+        "control/threshold_controller.cpp"
+        "control/signal_filter.cpp"
+        "control/sensor_reader.cpp"
+        "control/light_controller.cpp"
+    INCLUDE_DIRS
+        "../include"
 )
