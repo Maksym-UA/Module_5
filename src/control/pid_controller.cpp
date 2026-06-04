@@ -23,6 +23,7 @@ float PidController::clamp(float value, float min_value, float max_value)
     return value;
 }
 
+// Computes the PID output based on the setpoint, current input, and time delta.
 float PidController::compute(float setpoint, float input, float dt_seconds)
 {
     if (dt_seconds <= 0.0F) {

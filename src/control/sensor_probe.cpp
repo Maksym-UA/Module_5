@@ -25,18 +25,21 @@ float SensorProbeLogic::clamp(float value, float min_value, float max_value)
     return value;
 }
 
+// Converts a raw ADC value to a percentage (0-100%).
 float SensorProbeLogic::raw_to_percent(uint16_t raw)
 {
     const float raw_percent = (static_cast<float>(raw) * 100.0F) / kAdcMaxRaw;
     return clamp(raw_percent, 0.0F, 100.0F);
 }
 
+// Adjusts the sensor percentage based on whether inversion is needed for control logic.
 float SensorProbeLogic::sensor_percent_for_control(uint8_t sensor_percent, bool invert_sensor_percent)
 {
     const float value = static_cast<float>(sensor_percent);
     return invert_sensor_percent ? (100.0F - value) : value;
 }
 
+// Probes the sensor by setting the LED to a known brightness and measuring the raw sensor values to determine if the sensor percentage should be inverted for control logic.
 float SensorProbeLogic::sensor_percent_from_probe_raw(uint16_t raw, const SensorProbe &probe)
 {
     if (!probe.has_raw_span) {
@@ -55,6 +58,7 @@ float SensorProbeLogic::sensor_percent_from_probe_raw(uint16_t raw, const Sensor
     return clamp((relative * 100.0F) / span, 0.0F, 100.0F);
 }
 
+// Converts a raw sensor value to a percentage based on a specified control range and inversion setting.
 float SensorProbeLogic::sensor_percent_from_control_range(
     uint16_t raw,
     uint16_t raw_min,
@@ -85,6 +89,7 @@ esp_err_t SensorProbeLogic::detect_sensor_inversion(SensorProbe *probe)
         return ESP_ERR_INVALID_ARG;
     }
 
+    // Initialize the probe with default values in case the detection process fails.
     probe->invert_sensor_percent = AppConfig::kDefaultInvertSensorPercent;
     probe->off_raw = 0;
     probe->on_raw = 0;

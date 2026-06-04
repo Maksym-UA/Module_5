@@ -10,9 +10,9 @@ public:
 private:
     static float clamp(float value, float min_value, float max_value);
 
-    float kp_ = 0.0F;
-    float ki_ = 0.0F;
-    float kd_ = 0.0F;
+    float kp_ = 0.0F; // Proportional gain
+    float ki_ = 0.0F; // Integral gain
+    float kd_ = 0.0F; // Derivative gain
     float out_min_ = 0.0F;
     float out_max_ = 0.0F;
     float deadband_ = 0.0F;

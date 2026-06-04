@@ -11,6 +11,8 @@ Firmware for ESP32-S3-DevKitC-1 that controls 5 LEDs with a closed-loop PID regu
 
 The controller targets a configured light level (`kTargetLightPercent`) and continuously adjusts LED brightness (0..127 duty units).
 
+At startup, firmware probes sensor polarity by measuring raw ADC with LEDs off and then on. If the detected span is large enough, runtime mapping uses that measured span. Otherwise, it falls back to a fixed raw control range.
+
 ## Hardware
 
 | Component | Value / Details |
@@ -71,8 +73,8 @@ pio device monitor -b 115200
 3. A startup polarity probe measures sensor raw value with LEDs off and on.
 4. Control loop runs every 50 ms:
 - read ADC raw
-- clamp accepted raw value (`kAcceptedRawMax`)
-- convert raw to measured percent (probe span or fallback raw range)
+- clamp accepted raw value to `kAcceptedRawMax`
+- convert raw to measured percent (probe span when valid, else fallback raw range)
 - low-pass filter measurement
 - compute PID output as brightness target
 - apply per-cycle brightness slew limit
@@ -82,11 +84,11 @@ pio device monitor -b 115200
 
 Current values from `include/app_config.h`:
 
-- PID gains: Kp=0.8, Ki=0.05, Kd=0.02
+- PID gains: Kp=0.8, Ki=0.08, Kd=0.02
 - Deadband: 3.0
 - Target light: 60.0%
 - Output range: 0..127
-- Input filter alpha: 0.04
+- Input filter alpha: 0.02
 - Max brightness step per cycle: 1.0
 - Loop period: 50 ms
 - Log period: 500 ms
@@ -97,7 +99,7 @@ Probe and conversion settings:
 - Probe brightness: 127
 - Probe settle delay: 180 ms
 - Probe min delta raw: 100
-- Fallback control raw range: 18..55
+- Fallback control raw range: 18..80
 - Accepted raw clamp max: 120
 
 ## Logging
@@ -105,13 +107,13 @@ Probe and conversion settings:
 Typical runtime log format:
 
 ```text
-I (...) PID: raw=1120 effective=120 measured=57.2% filtered=54.8% target=60.0% brightness=74
+I (...) PID: raw=39 effective=39 measured=68.4% filtered=57.9% target=60.0% brightness=44
 ```
 
 Fields:
 
 - `raw`: direct ADC sample
-- `effective`: clamped value used by control path
+- `effective`: clamped value used by control path (max 120)
 - `measured`: mapped sensor percent before filtering
 - `filtered`: low-pass filtered percent for PID input
 - `target`: configured setpoint percent

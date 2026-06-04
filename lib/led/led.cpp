@@ -39,8 +39,8 @@ constexpr ledc_channel_t kLedChannels[] = {
 constexpr TickType_t kFlashOnTime = pdMS_TO_TICKS(140);
 constexpr TickType_t kFlashOffTime = pdMS_TO_TICKS(80);
 
-//builds a bitmask for the LED GPIO pins, where each bit corresponds
-//to a pin number. This is used to configure multiple GPIOs at once.
+// Builds a bitmask for the LED GPIO pins, where each bit corresponds
+// to a pin number. This is used to configure multiple GPIOs at once.
 uint64_t build_led_mask()
 {
     uint64_t led_mask = 0;
@@ -102,7 +102,7 @@ esp_err_t write_all_leds_duty(uint32_t duty)
     return ESP_OK;
 }
 
-void flash_sequence_once()
+void flash_sequence_once_startup()
 {
     for (size_t i = 0; i < kLedCount; ++i) {
         ledc_set_duty(kLedSpeedMode, kLedChannels[i], 255);
@@ -150,7 +150,7 @@ esp_err_t Led::init_all()
         return off_err;
     }
 
-    flash_sequence_once();
+    flash_sequence_once_startup();
 
     ESP_LOGI(TAG, "All LED PWM channels initialized");
     return ESP_OK;
