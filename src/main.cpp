@@ -1,6 +1,10 @@
 #include "application.h"
 
-extern "C" void app_main(void)
+void setup()
 {
     application_init();
+}
+
+void loop()
+{
 }

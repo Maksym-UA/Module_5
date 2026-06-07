@@ -2,11 +2,6 @@ idf_component_register(
     SRCS
         "main.cpp"
         "application.cpp"
-        "control/pid_controller.cpp"
-        "control/sensor_probe.cpp"
-        "control/signal_filter.cpp"
-        "control/sensor_reader.cpp"
-        "control/light_controller.cpp"
     INCLUDE_DIRS
         "../include"
 )
