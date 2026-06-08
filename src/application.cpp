@@ -17,12 +17,14 @@ static double clamp_value(double value, double min_v, double max_v)
     return value;
 }
 
+// Map ADC reading to angle in degrees based on defined min/max and linear scaling. 0-360 degrees corresponds to ADC_MIN-ADC_MAX.
 static double map_adc_to_angle_deg(int adc_raw)
 {
     const double normalized = clamp_value(adc_raw, ADC_MIN, ADC_MAX) / ADC_MAX;
     return ANGLE_MIN_DEG + normalized * (ANGLE_MAX_DEG - ANGLE_MIN_DEG);
 }
 
+// Read the encoder pulse count, convert to angle in degrees, and clamp to defined range.
 static double read_encoder_angle_deg()
 {
     const int64_t pulse_count = g_encoder.getCount();
@@ -30,6 +32,7 @@ static double read_encoder_angle_deg()
     return clamp_value(angle, ANGLE_MIN_DEG, ANGLE_MAX_DEG);
 }
 
+// Set motor PWM duty cycle (0.0 to 1.0) with clamping and scaling to hardware limits.
 static void set_motor_pwm(double duty_0_to_1)
 {
     const double clamped_duty = clamp_value(duty_0_to_1, 0.0, 1.0);
@@ -37,6 +40,7 @@ static void set_motor_pwm(double duty_0_to_1)
     ledcWrite(PWM_CHANNEL, duty);
 }
 
+// Initialize peripherals: serial, ADC, PWM, encoder. Set up PID controller parameters and print startup info.
 static void control_setup()
 {
     Serial.begin(115200);
@@ -69,6 +73,46 @@ static void control_setup()
     Serial.println("Reset (clear angle/setpoint) only when pot is near minimum.");
 }
 
+// Test helper: periodically print raw ADC value from potentiometer.
+static void test_read_raw_potentiometer()
+{
+    static uint32_t last_print_ms = 0;
+    const uint32_t now_ms = millis();
+
+    if ((now_ms - last_print_ms) < POT_RAW_PRINT_MS) {
+        return;
+    }
+
+    last_print_ms = now_ms;
+    const int adc_raw = analogRead(POT_ADC_PIN);
+    Serial.printf("POT RAW ADC=%d\n", adc_raw);
+}
+
+// Test helper: periodically print raw encoder count and converted angle.
+static void test_read_encoder()
+{
+    static uint32_t last_print_ms = 0;
+    const uint32_t now_ms = millis();
+
+    if ((now_ms - last_print_ms) < ENCODER_TEST_PRINT_MS) {
+        return;
+    }
+
+    last_print_ms = now_ms;
+    const int64_t pulse_count = g_encoder.getCount();
+    const double angle_cont_deg = (pulse_count * 360.0) / ENCODER_CPR_X4;
+    int64_t wrapped_count = pulse_count % ENCODER_CPR_X4;
+    if (wrapped_count < 0) {
+        wrapped_count += ENCODER_CPR_X4;
+    }
+    const double angle_wrap_deg = (wrapped_count * 360.0) / ENCODER_CPR_X4;
+    Serial.printf("ENC RAW CNT=%lld ANG_CONT=%.2fdeg ANG_WRAP=%.2fdeg\n",
+                  static_cast<long long>(pulse_count),
+                  angle_cont_deg,
+                  angle_wrap_deg);
+}
+
+// Main control loop: read sensors, update PID, set actuator, and print status. Handles safety limits and rearming logic.
 static void control_loop()
 {
     static bool initialized = false;
@@ -174,9 +218,22 @@ void Application::run()
 {
     control_setup();
     Serial.println("Application starting...");
+#if ENCODER_TEST_MODE
+    Serial.println("Encoder test mode enabled");
+#elif POT_RAW_TEST_MODE
+    Serial.println("Raw potentiometer test mode enabled");
+#else
+    Serial.println("PID control mode enabled");
+#endif
 
     while (true) {
+#if ENCODER_TEST_MODE
+        test_read_encoder();
+#elif POT_RAW_TEST_MODE
+        test_read_raw_potentiometer();
+#else
         control_loop();
+#endif
         delay(1);
     }
 }
