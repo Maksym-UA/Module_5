@@ -1,32 +1,38 @@
-# Motor PID Controller - ESP32-S3, ESP-IDF
+# Motor PID Controller - ESP32-S3 (PlatformIO + Arduino)
 
 ## Overview
 
-The motor is PWM-controlled via LEDS.
-Encoder readings via через PCNT (quadrature x4)
-Process Potentiometer position
-Motor shaft position is controlled by PID
+This project controls DC motor position using:
+
+- PWM output (LEDC)
+- Quadrature encoder feedback (ESP32 PCNT via `ESP32Encoder`)
+- Potentiometer input (ADC)
+- PID position control (`PID_v1`)
+
+The firmware also includes dedicated test modes for:
+
+- Raw potentiometer ADC readout
+- Encoder count and angle readout
 
 ## Hardware
 
 | Component | Value / Details |
 |---|---|
 | MCU | ESP32-S3-DevKitC-1 |
-| Motor | Direct current motor |
-| Encoder | KY-040 module with mechanical EC11 encoder |
-| PWM control | NPN-transistor for PWM control of the motor |
-| | Potentiometer |
+| Motor | DC motor |
+| Encoder | KY-040 (EC11 mechanical encoder) |
+| Potentiometer | Analog position input (0-3.3 V to ADC) |
+| PWM stage | NPN transistor motor driver stage |
+| Discrete transistor stage parts | ST2N2222A NPN transistor + 1 kOhm base resistor |
+| Flyback protection | 1N4007 diode across motor terminals |
 
-
-## Wiring
-
-
+Note: connect motor via a proper driver/transistor stage, not directly to ESP32 pin.
 
 ## Software Requirements
 
 - VS Code
 - PlatformIO extension
-- ESP-IDF toolchain (installed automatically by PlatformIO)
+- PlatformIO Core with Arduino-ESP32 toolchain
 
 ## Build, Upload, Monitor
 
@@ -48,17 +54,64 @@ Serial monitor:
 pio device monitor -b 115200
 ```
 
-## Runtime Flow
+## Runtime Modes
 
-when turning the potetiometer cloclwise (increasing voltage at ADC input) the motor is supposed to alter its shaft position according to the potemtiomer position. 
-When altering voltage at ADC input within 0–3.3 V the motor is supposed to rotate within 0° до 360° range.
-Motor position control is to be implemented via encoder. 
-The PID regulator ueses these coefficients:
-PID_KP
-PID_KI
-PID_KD
-При досягненні максимального положення потенціометра або при повороті потенціометра проти годинникової стрілки двигун повинен зупинятися.
-Для поновлення регулювання необхідно повернути потенціометр у початкове положення (мінімальна вихідна напруга).
+Mode is selected in `include/app_config.h`.
+
+### 1) PID Control Mode (default)
+
+Set:
+
+```c
+#define ENCODER_TEST_MODE 0
+#define POT_RAW_TEST_MODE 0
+```
+
+Behavior:
+
+- Potentiometer ADC is converted to setpoint angle in range 0..360 deg
+- Encoder count is converted to measured angle
+- PID computes PWM duty to move shaft toward setpoint
+- Control loop timing is defined by `CONTROL_PERIOD_MS`
+
+### 2) Potentiometer Raw Test Mode
+
+Set:
+
+```c
+#define ENCODER_TEST_MODE 0
+#define POT_RAW_TEST_MODE 1
+```
+
+Serial output:
+
+- `POT RAW ADC=<value>` every `POT_RAW_PRINT_MS`
+
+### 3) Encoder Test Mode
+
+Set:
+
+```c
+#define ENCODER_TEST_MODE 1
+```
+
+(`ENCODER_TEST_MODE` has higher priority than `POT_RAW_TEST_MODE`.)
+
+Serial output:
+
+- `ENC RAW CNT=<count> ANG_CONT=<deg> ANG_WRAP=<deg>` every `ENCODER_TEST_PRINT_MS`
+- `ANG_CONT` is continuous accumulated angle
+- `ANG_WRAP` is wrapped one-turn angle in range 0..360
+
+## Important Configuration
+
+Main parameters are in `include/app_config.h`:
+
+- Pins: `PWM_OUT_PIN`, `ENCODER_A_PIN`, `ENCODER_B_PIN`, `POT_ADC_PIN`
+- PWM: `PWM_FREQ_HZ`, `PWM_RES_BITS`, `PWM_CHANNEL`
+- Encoder scaling: `ENCODER_CPR_X4`
+- PID gains: `PID_KP`, `PID_KI`, `PID_KD`
+- Limits/timing: `ADC_*`, `ANGLE_*`, `CONTROL_PERIOD_MS`, `STATUS_PRINT_MS`
 
 ## Project Structure
 
@@ -66,15 +119,16 @@ PID_KD
 include/
   app_config.h
   application.h
+
 src/
   application.cpp
   CMakeLists.txt
   main.cpp
-  
 
 CMakeLists.txt
 platformio.ini
 sdkconfig.esp32-s3-devkitc-1
+README.md
 ```
 
 ## Contact
