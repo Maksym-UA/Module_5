@@ -1,5 +1,7 @@
 #include "bm280.h"
 
+#include "i2c_bus.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -171,17 +173,9 @@ bool BME280::begin(int sdaPin, int sclPin, uint8_t address, uint32_t clockHz)
 {
     initialized_ = false;
 
-    i2c_master_bus_config_t bus_cfg = {};
-    bus_cfg.i2c_port             = I2C_NUM_0;
-    bus_cfg.sda_io_num           = static_cast<gpio_num_t>(sdaPin);
-    bus_cfg.scl_io_num           = static_cast<gpio_num_t>(sclPin);
-    bus_cfg.clk_source           = I2C_CLK_SRC_DEFAULT;
-    bus_cfg.glitch_ignore_cnt    = 7;
-    bus_cfg.flags.enable_internal_pullup = true;
-
-    esp_err_t err = i2c_new_master_bus(&bus_cfg, &bus_handle_);
+    esp_err_t err = app_i2c::acquire_bus(sdaPin, sclPin, &bus_handle_);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "i2c_new_master_bus failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Failed to acquire shared I2C bus: %s", esp_err_to_name(err));
         return false;
     }
 

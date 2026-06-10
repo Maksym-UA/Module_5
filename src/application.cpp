@@ -13,6 +13,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "oled.h"
+
 static const char *TAG = "application";
 
 static constexpr gpio_num_t kLedGpio          = GPIO_NUM_16;
@@ -21,6 +23,20 @@ static constexpr uint32_t   kPublishIntervalMs = 15 * 1000;
 // I2C pins wired to the BME280 breakout.
 static constexpr int kI2cSda = 8;
 static constexpr int kI2cScl = 9;
+
+static int32_t to_scaled_100(float value)
+{
+  const float scaled = value * 100.0F;
+  return static_cast<int32_t>(scaled >= 0.0F ? scaled + 0.5F : scaled - 0.5F);
+}
+
+static void format_scaled_100(char *buffer, size_t buffer_size, float value)
+{
+  const int32_t scaled = to_scaled_100(value);
+  const int32_t whole = scaled / 100;
+  const int32_t fraction = scaled >= 0 ? (scaled % 100) : -(scaled % 100);
+  snprintf(buffer, buffer_size, "%ld.%02ld", static_cast<long>(whole), static_cast<long>(fraction));
+}
 
 static void handle_mqtt_message(const char *topic, const char *data)
 {
@@ -64,7 +80,7 @@ static void publish_sensor_value(esp_mqtt_client_handle_t client,
     char payload[32];
     char topic[64];
 
-    snprintf(payload, sizeof(payload), "%.2f", value);
+    format_scaled_100(payload, sizeof(payload), value);
     snprintf(topic, sizeof(topic), "%s%s", MQTT_TOPIC, suffix);
 
     if (esp_mqtt_client_publish(client, topic, payload, 0, 1, 1) < 0) {
@@ -116,6 +132,10 @@ void Application::run()
         ESP_LOGE(TAG, "BME280 init failed — check wiring (SDA=%d SCL=%d)", kI2cSda, kI2cScl);
     }
 
+    if (oled_app::init(kI2cSda, kI2cScl) == ESP_OK) {
+        oled_app::showStartup();
+    }
+
     // Wait for the MQTT broker connection before entering the publish loop.
     ESP_LOGI(TAG, "Waiting for MQTT connection...");
     while (!mqtt_is_connected()) {
@@ -141,8 +161,24 @@ void Application::run()
             continue;
         }
 
-        ESP_LOGI(TAG, "BME280 T=%.2f°C H=%.2f%% P=%.2fhPa",
-                 data.temperatureC, data.humidityPercent, data.pressureHpa);
+        char temp_text[16];
+        char humidity_text[16];
+        char pressure_text[16];
+        format_scaled_100(temp_text, sizeof(temp_text), data.temperatureC);
+        format_scaled_100(humidity_text, sizeof(humidity_text), data.humidityPercent);
+        format_scaled_100(pressure_text, sizeof(pressure_text), data.pressureHpa);
+
+        ESP_LOGI(TAG, "BME280 T=%s C H=%s%% P=%s hPa",
+           temp_text,
+           humidity_text,
+           pressure_text);
+
+        oled_app::SensorDisplayData display_data{
+            .temperatureC = data.temperatureC,
+            .humidityPercent = data.humidityPercent,
+            .pressureHpa = data.pressureHpa,
+        };
+        oled_app::showSensorData(display_data);
 
         esp_mqtt_client_handle_t client = mqtt_get_client();
         if (client != NULL) {

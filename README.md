@@ -8,6 +8,7 @@ Firmware for the ESP32-S3-DevKitC-1 that connects to Wi-Fi, reads BME280 environ
 - Framework: ESP-IDF via PlatformIO
 - Sensor: BME280 on I2C
 - Transport: MQTT over Wi-Fi
+- SSD1306 128x64 OLED
 
 `src/main.cpp` stays minimal and only calls `application_init()`. The runtime logic lives in `src/application.cpp`.
 
