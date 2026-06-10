@@ -1,12 +1,14 @@
 #include "mqtt.h"
 #include "esp_log.h"
 #include <string.h>
+#include "esp_mac.h"
 
 #define BUFFER_SIZE 128
 
 static const char *TAG = "mqtt";
 static esp_mqtt_client_handle_t s_client = NULL;
 static mqtt_message_handler_t s_message_handler = NULL;
+static volatile bool s_connected = false;
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                                 int32_t event_id, void *event_data)
@@ -21,6 +23,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     switch ((esp_mqtt_event_id_t)event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT connected");
+            s_connected = true;
             if (esp_mqtt_client_subscribe(client, MQTT_COMMANDS, 0) < 0) {
                 ESP_LOGE(TAG, "Failed to subscribe to %s", MQTT_COMMANDS);
             }
@@ -28,6 +31,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGI(TAG, "MQTT disconnected");
+            s_connected = false;
             break;
 
         case MQTT_EVENT_DATA:
@@ -69,8 +73,17 @@ void mqtt_app_start(void)
     esp_mqtt_client_config_t mqtt_cfg = {};
     mqtt_cfg.broker.address.uri = MQTT_BROKER_URI;
 
-    s_client = esp_mqtt_client_init(&mqtt_cfg);
+    static char client_id[32];
+    uint8_t mac[6] = {};
+    ESP_ERROR_CHECK(esp_read_mac(mac, ESP_MAC_WIFI_STA));
+    snprintf(client_id, sizeof(client_id),
+             "esp32s3_%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
+    mqtt_cfg.credentials.client_id = client_id;
+    mqtt_cfg.session.keepalive = 30;
+
+    s_client = esp_mqtt_client_init(&mqtt_cfg);
     ESP_ERROR_CHECK(esp_mqtt_client_register_event(s_client, MQTT_EVENT_ANY,
                                                     mqtt_event_handler, NULL));
     ESP_ERROR_CHECK(esp_mqtt_client_start(s_client));
@@ -84,4 +97,9 @@ esp_mqtt_client_handle_t mqtt_get_client(void)
 void mqtt_set_message_handler(mqtt_message_handler_t handler)
 {
     s_message_handler = handler;
+}
+
+bool mqtt_is_connected(void)
+{
+    return s_connected;
 }

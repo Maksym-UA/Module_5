@@ -1,50 +1,40 @@
-# Light Controller - ESP32-S3, ESP-IDF
+# ESP32-S3 BME280 MQTT Publisher
 
 ## Overview
 
-Firmware for ESP32-S3-DevKitC-1 that controls 5 LEDs with a closed-loop PID regulator using a photoresistor as feedback.
+Firmware for the ESP32-S3-DevKitC-1 that connects to Wi-Fi, reads BME280 environmental data, and publishes the results over MQTT.
 
 - Platform: ESP32-S3-DevKitC-1
 - Framework: ESP-IDF via PlatformIO
-- Sensor input: ADC oneshot (photoresistor on GPIO4)
-- LED output: LEDC PWM on GPIO5..GPIO9
+- Sensor: BME280 on I2C
+- Transport: MQTT over Wi-Fi
 
-The controller targets a configured light level (`kTargetLightPercent`) and continuously adjusts LED brightness (0..127 duty units).
-
-At startup, firmware probes sensor polarity by measuring raw ADC with LEDs off and then on. If the detected span is large enough, runtime mapping uses that measured span. Otherwise, it falls back to a fixed raw control range.
+`src/main.cpp` stays minimal and only calls `application_init()`. The runtime logic lives in `src/application.cpp`.
 
 ## Hardware
 
 | Component | Value / Details |
 |---|---|
 | MCU | ESP32-S3-DevKitC-1 |
-| Sensor | Photoresistor module on GPIO4 |
-| LEDs | 5 LEDs on GPIO5, GPIO6, GPIO7, GPIO8, GPIO9 |
-| PWM driver | LEDC low-speed mode, 8-bit resolution, 5 kHz |
+| Sensor | BME280 |
+| BME280 SDA | GPIO8 |
+| BME280 SCL | GPIO9 |
+| Status LED | GPIO16 |
 
-## Wiring
+## Wi-Fi And MQTT
 
-Photoresistor:
+The firmware connects to the Wi-Fi network defined in `lib/credentials/credentials.h` and then starts the MQTT client in `lib/mqtt/`.
 
-- VCC -> 3.3V
-- GND -> GND
-- OUT -> GPIO4
+- Broker: `mqtt://broker.hivemq.com:1883`
+- Topic prefix: `controller_br_59/`
+- Commands: `controller_br_59/commands`
+- Status: `controller_br_59/status`
 
-LEDs:
+Published sensor topics:
 
-- GPIO5 -> LED1
-- GPIO6 -> LED2
-- GPIO7 -> LED3
-- GPIO8 -> LED4
-- GPIO9 -> LED5
-
-Use a current-limiting resistor for each LED.
-
-## Software Requirements
-
-- VS Code
-- PlatformIO extension
-- ESP-IDF toolchain (installed automatically by PlatformIO)
+- `controller_br_59/temperature`
+- `controller_br_59/humidity`
+- `controller_br_59/pressure`
 
 ## Build, Upload, Monitor
 
@@ -69,55 +59,12 @@ pio device monitor -b 115200
 ## Runtime Flow
 
 1. `main.cpp` calls `application_init()`.
-2. `Application::start()` initializes LED and ADC drivers.
-3. A startup polarity probe measures sensor raw value with LEDs off and on.
-4. Control loop runs every 50 ms:
-- read ADC raw
-- clamp accepted raw value to `kAcceptedRawMax`
-- convert raw to measured percent (probe span when valid, else fallback raw range)
-- low-pass filter measurement
-- compute PID output as brightness target
-- apply per-cycle brightness slew limit
-- write PWM duty to all LEDs
-
-## Control Configuration
-
-Current values from `include/app_config.h`:
-
-- PID gains: Kp=0.8, Ki=0.08, Kd=0.02
-- Deadband: 3.0
-- Target light: 60.0%
-- Output range: 0..127
-- Input filter alpha: 0.02
-- Max brightness step per cycle: 1.0
-- Loop period: 50 ms
-- Log period: 500 ms
-
-Probe and conversion settings:
-
-- Default invert fallback: true
-- Probe brightness: 127
-- Probe settle delay: 180 ms
-- Probe min delta raw: 100
-- Fallback control raw range: 18..80
-- Accepted raw clamp max: 120
-
-## Logging
-
-Typical runtime log format:
-
-```text
-I (...) PID: raw=39 effective=39 measured=68.4% filtered=57.9% target=60.0% brightness=44
-```
-
-Fields:
-
-- `raw`: direct ADC sample
-- `effective`: clamped value used by control path (max 120)
-- `measured`: mapped sensor percent before filtering
-- `filtered`: low-pass filtered percent for PID input
-- `target`: configured setpoint percent
-- `brightness`: PWM duty command (0..127)
+2. `Application::start()` enters the app runtime.
+3. `Application::run()` initializes NVS, GPIO, Wi-Fi, and MQTT.
+4. The BME280 is initialized over I2C.
+5. The app waits for MQTT to connect.
+6. Every 15 seconds it reads temperature, humidity, and pressure.
+7. Each value is published to its MQTT topic.
 
 ## Project Structure
 
@@ -125,36 +72,34 @@ Fields:
 include/
   app_config.h
   application.h
-  control/
-    light_controller.h
-    pid_controller.h
-    sensor_probe.h
-    sensor_reader.h
-    signal_filter.h
 
 lib/
-  led/
-    led.cpp
-    led.h
-  photoresistor/
-    photoresistor.cpp
-    photoresistor.h
+  bm280/
+    bm280.cpp
+    bm280.h
+  credentials/
+    credentials.h
+  mqtt/
+    mqtt.cpp
+    mqtt.h
+  wifi/
+    wifi.cpp
+    wifi.h
 
 src/
   application.cpp
   CMakeLists.txt
   main.cpp
-  control/
-    light_controller.cpp
-    pid_controller.cpp
-    sensor_probe.cpp
-    sensor_reader.cpp
-    signal_filter.cpp
 
 CMakeLists.txt
 platformio.ini
 sdkconfig.esp32-s3-devkitc-1
 ```
+
+## Notes
+
+- MQTT publish calls use QoS 1 and retain enabled, so the last value remains available in the broker.
+- If MQTT Explorer does not show live updates, subscribe to `controller_br_59/#`.
 
 ## Contact
 
