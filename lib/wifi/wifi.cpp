@@ -9,8 +9,8 @@
 #include "esp_log.h"
 #include <string.h>
 
-#define WIFI_CONNECTED_BIT  BIT0
-#define WIFI_FAIL_BIT       BIT1
+#define WIFI_CONNECTED_BIT  BIT0// Used to signal when we are connected to the AP with an IP
+#define WIFI_FAIL_BIT       BIT1// Used to signal when we failed to connect after the maximum amount of retries
 #define WIFI_MAX_RETRY      10
 
 static const char *TAG = "wifi";
@@ -44,7 +44,7 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
-void wifi_init_sta(void)
+void wifi_init_sta(void)// Initialize WiFi in station mode and connect to the AP
 {
     s_wifi_event_group = xEventGroupCreate();
 

@@ -19,6 +19,9 @@ static i2c_master_dev_handle_t s_dev_handle = nullptr;
 static bool s_ready = false;
 static uint8_t s_framebuffer[kDisplayWidth * kPageCount] = {};
 
+// 5x7 font for digits, space, and a few symbols.  
+// Each byte represents a column of 8 pixels (LSB at the top).
+
 static const uint8_t kGlyphSpace[5] = {0x00, 0x00, 0x00, 0x00, 0x00};
 static const uint8_t kGlyphHyphen[5] = {0x08, 0x08, 0x08, 0x08, 0x08};
 static const uint8_t kGlyphPeriod[5] = {0x00, 0x60, 0x60, 0x00, 0x00};
@@ -45,19 +48,7 @@ static esp_err_t ensure_ready()
     return ESP_OK;
 }
 
-static int32_t to_scaled_100(float value)
-{
-    const float scaled = value * 100.0F;
-    return static_cast<int32_t>(scaled >= 0.0F ? scaled + 0.5F : scaled - 0.5F);
-}
 
-static void format_scaled_100(char *buffer, size_t buffer_size, float value)
-{
-    const int32_t scaled = to_scaled_100(value);
-    const int32_t whole = scaled / 100;
-    const int32_t fraction = scaled >= 0 ? (scaled % 100) : -(scaled % 100);
-    snprintf(buffer, buffer_size, "%ld.%02ld", static_cast<long>(whole), static_cast<long>(fraction));
-}
 
 static const uint8_t *lookup_glyph(char c)
 {
@@ -79,6 +70,7 @@ static const uint8_t *lookup_glyph(char c)
         default: return kGlyphSpace;
     }
 }
+
 
 static esp_err_t transmit_prefixed(uint8_t prefix, const uint8_t *data, size_t length)
 {

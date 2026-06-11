@@ -54,18 +54,19 @@ private:
         int8_t   dig_H6 = 0;
     };
 
+    // I2C handles and calibration data
     i2c_master_bus_handle_t bus_handle_  = nullptr;
     i2c_master_dev_handle_t dev_handle_  = nullptr;
-    bool                    initialized_ = false;
-    CalibData               calib_       = {};
-    mutable int32_t         tFine_       = 0;
+    bool initialized_ = false;
+    CalibData calib_  = {};
+    mutable int32_t tFine_ = 0;
 
-    bool readRegister(uint8_t reg, uint8_t* data, uint8_t len) const;
+    bool readRegister(uint8_t reg, uint8_t* data, uint8_t len) const; // Read multiple bytes starting from reg
     bool writeRegister(uint8_t reg, uint8_t value) const;
     bool readCalibData();
 
-    static uint16_t readU16LE(const uint8_t* data);
-    static int16_t  readS16LE(const uint8_t* data);
+    static uint16_t readU16LE(const uint8_t* data);// Read unsigned 16-bit little-endian from byte array
+    static int16_t  readS16LE(const uint8_t* data);// Read unsigned/signed 16-bit little-endian from byte array
 
     int32_t  compensateTemp(int32_t adc_T)  const;
     uint32_t compensatePress(int32_t adc_P) const;

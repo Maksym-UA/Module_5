@@ -10,9 +10,7 @@ static const char *TAG = "bm280";
 
 namespace bme280_app {
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+
 
 uint16_t BME280::readU16LE(const uint8_t* data)
 {
@@ -25,9 +23,7 @@ int16_t BME280::readS16LE(const uint8_t* data)
     return static_cast<int16_t>(readU16LE(data));
 }
 
-// ---------------------------------------------------------------------------
-// I2C communication
-// ---------------------------------------------------------------------------
+// I2C 
 
 bool BME280::readRegister(uint8_t reg, uint8_t* data, uint8_t len) const
 {
@@ -56,14 +52,12 @@ bool BME280::writeRegister(uint8_t reg, uint8_t value) const
     return true;
 }
 
-// ---------------------------------------------------------------------------
 // Calibration
-// ---------------------------------------------------------------------------
 
 bool BME280::readCalibData()
 {
-    uint8_t calib1[26] = {};
-    uint8_t calib2[7]  = {};
+    uint8_t calib1[26] = {};// calib data from 0x88 to 0xA1
+    uint8_t calib2[7]  = {};// calib data from 0xE1 to 0xE7
 
     if (!readRegister(REG_CALIB00, calib1, sizeof(calib1))) {
         return false;
@@ -108,9 +102,8 @@ bool BME280::readCalibData()
     return true;
 }
 
-// ---------------------------------------------------------------------------
+
 // Bosch compensation formulas (integer, from datasheet section 8.2)
-// ---------------------------------------------------------------------------
 
 int32_t BME280::compensateTemp(int32_t adc_T) const
 {
@@ -165,9 +158,7 @@ uint32_t BME280::compensateHumid(int32_t adc_H) const
     return static_cast<uint32_t>(v >> 12);
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 bool BME280::begin(int sdaPin, int sclPin, uint8_t address, uint32_t clockHz)
 {
