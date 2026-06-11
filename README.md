@@ -27,15 +27,15 @@ Firmware for the ESP32-S3-DevKitC-1 that connects to Wi-Fi, reads BME280 environ
 The firmware connects to the Wi-Fi network defined in `lib/credentials/credentials.h` and then starts the MQTT client in `lib/mqtt/`.
 
 - Broker: `mqtt://broker.hivemq.com:1883`
-- Topic prefix: `controller_br_59/`
-- Commands: `controller_br_59/commands`
-- Status: `controller_br_59/status`
+- Topic prefix: `module59_11/`
+- Commands: `module59_11/commands`
+- Status: `module59_11/status`
 
 Published sensor topics:
 
-- `controller_br_59/temperature`
-- `controller_br_59/humidity`
-- `controller_br_59/pressure`
+- `module59_11/temperature`
+- `module59_11/humidity`
+- `module59_11/pressure`
 
 ## Build, Upload, Monitor
 
@@ -100,7 +100,7 @@ sdkconfig.esp32-s3-devkitc-1
 ## Notes
 
 - MQTT publish calls use QoS 1 and retain enabled, so the last value remains available in the broker.
-- If MQTT Explorer does not show live updates, subscribe to `controller_br_59/#`.
+- Verified with MQTTX: subscribing to `module59_11/#` shows live telemetry updates correctly.
 
 ## Contact
 

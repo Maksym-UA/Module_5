@@ -1,6 +1,5 @@
 #include "oled.h"
 
-#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -21,10 +20,9 @@ static bool s_ready = false;
 static uint8_t s_framebuffer[kDisplayWidth * kPageCount] = {};
 
 static const uint8_t kGlyphSpace[5] = {0x00, 0x00, 0x00, 0x00, 0x00};
-static const uint8_t kGlyphPercent[5] = {0x63, 0x13, 0x08, 0x64, 0x63};
 static const uint8_t kGlyphHyphen[5] = {0x08, 0x08, 0x08, 0x08, 0x08};
 static const uint8_t kGlyphPeriod[5] = {0x00, 0x60, 0x60, 0x00, 0x00};
-static const uint8_t kGlyphColon[5] = {0x00, 0x36, 0x36, 0x00, 0x00};
+static const uint8_t kGlyphPercent[5] = {0x63, 0x13, 0x08, 0x64, 0x63};
 
 static const uint8_t kGlyph0[5] = {0x3E, 0x51, 0x49, 0x45, 0x3E};
 static const uint8_t kGlyph1[5] = {0x00, 0x42, 0x7F, 0x40, 0x00};
@@ -37,32 +35,6 @@ static const uint8_t kGlyph7[5] = {0x01, 0x71, 0x09, 0x05, 0x03};
 static const uint8_t kGlyph8[5] = {0x36, 0x49, 0x49, 0x49, 0x36};
 static const uint8_t kGlyph9[5] = {0x06, 0x49, 0x49, 0x29, 0x1E};
 
-static const uint8_t kGlyphA[5] = {0x7E, 0x11, 0x11, 0x11, 0x7E};
-static const uint8_t kGlyphB[5] = {0x7F, 0x49, 0x49, 0x49, 0x36};
-static const uint8_t kGlyphC[5] = {0x3E, 0x41, 0x41, 0x41, 0x22};
-static const uint8_t kGlyphD[5] = {0x7F, 0x41, 0x41, 0x22, 0x1C};
-static const uint8_t kGlyphE[5] = {0x7F, 0x49, 0x49, 0x49, 0x41};
-static const uint8_t kGlyphF[5] = {0x7F, 0x09, 0x09, 0x09, 0x01};
-static const uint8_t kGlyphG[5] = {0x3E, 0x41, 0x49, 0x49, 0x7A};
-static const uint8_t kGlyphH[5] = {0x7F, 0x08, 0x08, 0x08, 0x7F};
-static const uint8_t kGlyphI[5] = {0x00, 0x41, 0x7F, 0x41, 0x00};
-static const uint8_t kGlyphJ[5] = {0x20, 0x40, 0x41, 0x3F, 0x01};
-static const uint8_t kGlyphK[5] = {0x7F, 0x08, 0x14, 0x22, 0x41};
-static const uint8_t kGlyphL[5] = {0x7F, 0x40, 0x40, 0x40, 0x40};
-static const uint8_t kGlyphM[5] = {0x7F, 0x02, 0x0C, 0x02, 0x7F};
-static const uint8_t kGlyphN[5] = {0x7F, 0x04, 0x08, 0x10, 0x7F};
-static const uint8_t kGlyphO[5] = {0x3E, 0x41, 0x41, 0x41, 0x3E};
-static const uint8_t kGlyphP[5] = {0x7F, 0x09, 0x09, 0x09, 0x06};
-static const uint8_t kGlyphQ[5] = {0x3E, 0x41, 0x51, 0x21, 0x5E};
-static const uint8_t kGlyphR[5] = {0x7F, 0x09, 0x19, 0x29, 0x46};
-static const uint8_t kGlyphS[5] = {0x46, 0x49, 0x49, 0x49, 0x31};
-static const uint8_t kGlyphT[5] = {0x01, 0x01, 0x7F, 0x01, 0x01};
-static const uint8_t kGlyphU[5] = {0x3F, 0x40, 0x40, 0x40, 0x3F};
-static const uint8_t kGlyphV[5] = {0x1F, 0x20, 0x40, 0x20, 0x1F};
-static const uint8_t kGlyphW[5] = {0x3F, 0x40, 0x38, 0x40, 0x3F};
-static const uint8_t kGlyphX[5] = {0x63, 0x14, 0x08, 0x14, 0x63};
-static const uint8_t kGlyphY[5] = {0x07, 0x08, 0x70, 0x08, 0x07};
-static const uint8_t kGlyphZ[5] = {0x61, 0x51, 0x49, 0x45, 0x43};
 
 static esp_err_t ensure_ready()
 {
@@ -89,16 +61,11 @@ static void format_scaled_100(char *buffer, size_t buffer_size, float value)
 
 static const uint8_t *lookup_glyph(char c)
 {
-    if (c >= 'a' && c <= 'z') {
-        c = static_cast<char>(toupper(static_cast<unsigned char>(c)));
-    }
-
     switch (c) {
         case ' ': return kGlyphSpace;
         case '%': return kGlyphPercent;
         case '-': return kGlyphHyphen;
         case '.': return kGlyphPeriod;
-        case ':': return kGlyphColon;
         case '0': return kGlyph0;
         case '1': return kGlyph1;
         case '2': return kGlyph2;
@@ -109,32 +76,6 @@ static const uint8_t *lookup_glyph(char c)
         case '7': return kGlyph7;
         case '8': return kGlyph8;
         case '9': return kGlyph9;
-        case 'A': return kGlyphA;
-        case 'B': return kGlyphB;
-        case 'C': return kGlyphC;
-        case 'D': return kGlyphD;
-        case 'E': return kGlyphE;
-        case 'F': return kGlyphF;
-        case 'G': return kGlyphG;
-        case 'H': return kGlyphH;
-        case 'I': return kGlyphI;
-        case 'J': return kGlyphJ;
-        case 'K': return kGlyphK;
-        case 'L': return kGlyphL;
-        case 'M': return kGlyphM;
-        case 'N': return kGlyphN;
-        case 'O': return kGlyphO;
-        case 'P': return kGlyphP;
-        case 'Q': return kGlyphQ;
-        case 'R': return kGlyphR;
-        case 'S': return kGlyphS;
-        case 'T': return kGlyphT;
-        case 'U': return kGlyphU;
-        case 'V': return kGlyphV;
-        case 'W': return kGlyphW;
-        case 'X': return kGlyphX;
-        case 'Y': return kGlyphY;
-        case 'Z': return kGlyphZ;
         default: return kGlyphSpace;
     }
 }
@@ -173,12 +114,19 @@ static esp_err_t send_command(uint8_t command)
 
 static esp_err_t update_display()
 {
-    ESP_RETURN_ON_ERROR(send_command(0x21), TAG, "Failed to set column address mode");
-    ESP_RETURN_ON_ERROR(send_command(0x00), TAG, "Failed to set column start");
-    ESP_RETURN_ON_ERROR(send_command(kDisplayWidth - 1), TAG, "Failed to set column end");
-    ESP_RETURN_ON_ERROR(send_command(0x22), TAG, "Failed to set page address mode");
-    ESP_RETURN_ON_ERROR(send_command(0x00), TAG, "Failed to set page start");
-    ESP_RETURN_ON_ERROR(send_command(kPageCount - 1), TAG, "Failed to set page end");
+    esp_err_t err = send_command(0x21);
+    if (err != ESP_OK) return err;
+    err = send_command(0x00);
+    if (err != ESP_OK) return err;
+    err = send_command(kDisplayWidth - 1);
+    if (err != ESP_OK) return err;
+    err = send_command(0x22);
+    if (err != ESP_OK) return err;
+    err = send_command(0x00);
+    if (err != ESP_OK) return err;
+    err = send_command(kPageCount - 1);
+    if (err != ESP_OK) return err;
+
     return transmit_prefixed(0x40, s_framebuffer, sizeof(s_framebuffer));
 }
 
@@ -247,22 +195,24 @@ esp_err_t init(int sda_gpio, int scl_gpio, int reset_gpio)
     }
 
     i2c_master_bus_handle_t bus_handle = nullptr;
-    ESP_RETURN_ON_ERROR(app_i2c::acquire_bus(sda_gpio, scl_gpio, &bus_handle),
-                        TAG,
-                        "Failed to acquire shared I2C bus");
+    esp_err_t err = app_i2c::acquire_bus(sda_gpio, scl_gpio, &bus_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to acquire shared I2C bus: %s", esp_err_to_name(err));
+        return err;
+    }
 
     i2c_device_config_t dev_cfg = {};
     dev_cfg.dev_addr_length = I2C_ADDR_BIT_LEN_7;
     dev_cfg.device_address = kI2cAddress;
     dev_cfg.scl_speed_hz = 400000;
 
-    esp_err_t err = i2c_master_bus_add_device(bus_handle, &dev_cfg, &s_dev_handle);
+    err = i2c_master_bus_add_device(bus_handle, &dev_cfg, &s_dev_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "i2c_master_bus_add_device failed: %s", esp_err_to_name(err));
         return err;
     }
 
-    static_cast<void>(reset_gpio);
+    (void)reset_gpio;
 
     const uint8_t init_sequence[] = {
         0xAE, 0xD5, 0x80, 0xA8, 0x3F, 0xD3, 0x00, 0x40,
@@ -273,11 +223,20 @@ esp_err_t init(int sda_gpio, int scl_gpio, int reset_gpio)
 
     ESP_LOGI(TAG, "Initializing SSD1306 panel (128x64)...");
     for (size_t i = 0; i < sizeof(init_sequence); ++i) {
-        ESP_RETURN_ON_ERROR(send_command(init_sequence[i]), TAG, "Failed to send init command");
+        err = send_command(init_sequence[i]);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to send init command: %s", esp_err_to_name(err));
+            return err;
+        }
     }
 
     clear_buffer();
-    ESP_RETURN_ON_ERROR(update_display(), TAG, "Failed to clear OLED after init");
+    err = update_display();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to clear OLED after init: %s", esp_err_to_name(err));
+        return err;
+    }
+
     s_ready = true;
     return ESP_OK;
 }
@@ -289,9 +248,6 @@ esp_err_t showStartup()
     }
 
     clear_buffer();
-    write_line(0, "ESP-IDF Framework");
-    write_line(2, "OLED ready");
-    write_line(4, "Waiting for data...");
     return update_display();
 }
 
@@ -316,23 +272,18 @@ esp_err_t showSensorData(const SensorDisplayData &data)
     }
 
     char line[22];
-    char value_text[12];
 
     clear_buffer();
 
-    format_scaled_100(value_text, sizeof(value_text), data.temperatureC);
-    snprintf(line, sizeof(line), "Temp: %s C", value_text);
+    snprintf(line, sizeof(line), "1 %.1f", data.temperatureC);
     write_line(0, line);
 
-    format_scaled_100(value_text, sizeof(value_text), data.humidityPercent);
-    snprintf(line, sizeof(line), "Hum : %s %%", value_text);
+    snprintf(line, sizeof(line), "2 %.1f%%", data.humidityPercent);
     write_line(2, line);
 
-    format_scaled_100(value_text, sizeof(value_text), data.pressureHpa);
-    snprintf(line, sizeof(line), "Pres: %s hPa", value_text);
+    snprintf(line, sizeof(line), "3 %.0f", data.pressureHpa);
     write_line(4, line);
 
-    write_line(6, "MQTT publish active");
     return update_display();
 }
 

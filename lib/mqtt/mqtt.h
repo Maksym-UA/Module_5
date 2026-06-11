@@ -4,9 +4,9 @@
 #include "mqtt_client.h"
 
 #define MQTT_BROKER_URI  "mqtt://broker.hivemq.com:1883"
-#define MQTT_TOPIC       "controller_br_59/"
-#define MQTT_COMMANDS    "controller_br_59/commands"
-#define MQTT_STATUS      "controller_br_59/status"
+#define MQTT_TOPIC       "module59_11/"
+#define MQTT_COMMANDS    "module59_11/commands"
+#define MQTT_STATUS      "module59_11/status"
 
 typedef void (*mqtt_message_handler_t)(const char *topic, const char *data);
 
